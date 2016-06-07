@@ -42,24 +42,24 @@ int main(int argc, char *argv[])
     getnameinfo(res->ai_addr, res->ai_addrlen, buff, sizeof(buff), NULL, 0, NI_NUMERICHOST);
     printf("IP address : %s¥n", buff);
 
-//    sock[n] = socket(res->ai_family, res->ai_socktype, 0);
-//    setsockopt(sock[n], IPPROTO_IPV6, IPV6_V6ONLY, (char *)&yes, sizeof(yes));
-//    bind(sock[n], res->ai_addr, res->ai_addrlen);
-//    listen(sock[n], LISTENQ);
-//    
-//    if ( (pid = fork() ) == 0) {
-//      len = sizeof(client);
-//      connfd = accept(sock[n], (struct sockaddr *)&client, &len);
-//      if ( (pid2 = fork() ) == 0 ) {
-//        close(sock[n]);
-//        printf("accepted connection from %s, port=%d\n",
-//                inet_ntoa(client.sin_addr), ntohs(client.sin_port));
-//        write(connfd, "HELLO\n", 6);
-//        
-//        close(connfd); exit(0);
-//      }
-//      close(connfd);
-//    }
+    sock[n] = socket(res->ai_family, res->ai_socktype, 0);
+    setsockopt(sock[n], IPPROTO_IPV6, IPV6_V6ONLY, (char *)&yes, sizeof(yes));
+    bind(sock[n], res->ai_addr, res->ai_addrlen);
+    
+    if ( (pid = fork() ) == 0) {
+      listen(sock[n], LISTENQ);
+      len = sizeof(client);
+      connfd = accept(sock[n], (struct sockaddr *)&client, &len);
+      if ( (pid2 = fork() ) == 0 ) {
+        close(sock[n]);
+        printf("accepted connection from %s, port=%d\n",
+                inet_ntoa(client.sin_addr), ntohs(client.sin_port));
+        write(connfd, "HELLO\n", 6);
+        
+        close(connfd); exit(0);
+      }
+      close(connfd);
+    }
     res = res->ai_next;
       
     if(++n == 16) break;

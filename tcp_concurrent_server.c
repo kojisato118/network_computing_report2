@@ -66,6 +66,8 @@ int main(int argc, char *argv[])
     }
 
     setsockopt(sock[n], IPPROTO_IPV6, IPV6_V6ONLY, (char *)&yes, sizeof(yes));
+    setsockopt(sock[n],SOL_SOCKET,SO_REUSEADDR,(const char*)&yes,sizeof(yes));
+
     if(bind(sock[n], res->ai_addr, res->ai_addrlen) < 0){
       perror("bind");
       continue;
@@ -73,6 +75,10 @@ int main(int argc, char *argv[])
     
     if ( (pid = fork() ) == 0) {
       //listen用プロセス
+      for(int i = 0; i < n; i++){
+        close(sock[i]);
+      }
+
       if(listen(sock[n], LISTENQ) < 0){
         perror("listen");
         continue;
@@ -103,6 +109,8 @@ int main(int argc, char *argv[])
                  "<font color=red><h1>HELLO</h1></font>\r\n");
           send(connfd, obuf, (int)strlen(obuf), 0);
           
+          free(inbuf);
+          free(obuf);          
           close(connfd); exit(0);
         }else{
            if (pid2 != -1) {

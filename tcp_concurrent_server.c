@@ -109,8 +109,6 @@ int main(int argc, char *argv[])
                  "<font color=red><h1>HELLO</h1></font>\r\n");
           send(connfd, obuf, (int)strlen(obuf), 0);
           
-          free(inbuf);
-          free(obuf);          
           close(connfd); exit(0);
         }else{
            if (pid2 != -1) {

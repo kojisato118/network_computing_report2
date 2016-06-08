@@ -13,7 +13,7 @@
 #define LISTENQ 100
 #define MAX_PROTOCOL 5
 #define MAX_PROCESS 20
-#define BUFF_SIZE 256
+#define BUFF_SIZE 63335
 
 void sig_child(int signo);
 void sig_term(int signo); 

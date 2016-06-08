@@ -8,16 +8,18 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
+#include <errno.h>
 
 #define LISTENQ 100
-#define MAX_PROCESS 16
+#define MAX_PROTOCOL 5
+#define MAX_PROCESS 20
+#define BUFF_SIZE 256
 
 void sig_child(int signo);
 void sig_term(int signo); 
 void sig_quit(int signo);
+void sig_kill(int signo);
 
-int pids[MAX_PROCESS];
-void init_pids();
 void kill_all_pids();
 
 int main(int argc, char *argv[])
@@ -30,50 +32,76 @@ int main(int argc, char *argv[])
   int cli;
   char *cli_addr;
 
-  int sock[MAX_PROCESS];
+  int sock[MAX_PROTOCOL];
   int n;
   struct addrinfo hints, *res0, *res;
   int yes = 1;
 
-  char buff[256];
-  
+  char buff[BUFF_SIZE];
+  char inbuf[BUFF_SIZE];
+  char obuf[BUFF_SIZE];
+
   signal(SIGCHLD, sig_child); 
   signal(SIGTERM, sig_term);
   signal(SIGQUIT, sig_quit);
-
-  init_pids();
+  signal(SIGKILL, sig_kill);
 
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_UNSPEC;
   hints.ai_flags = AI_PASSIVE;
   hints.ai_socktype = SOCK_STREAM;
-  getaddrinfo(NULL, "12345", &hints, &res0);
+  getaddrinfo(NULL, "31614", &hints, &res0);
 
   res = res0;
   n = 0;
 
-  printf("start while!\n");
   while(res != NULL) {
-    printf("%d回目\n", n);
     getnameinfo(res->ai_addr, res->ai_addrlen, buff, sizeof(buff), NULL, 0, NI_NUMERICHOST);
     printf("IP address : %s¥n", buff);
 
     sock[n] = socket(res->ai_family, res->ai_socktype, 0);
+    if (sock[n] < 0) {
+      perror("sock");
+      continue;
+    }
+
     setsockopt(sock[n], IPPROTO_IPV6, IPV6_V6ONLY, (char *)&yes, sizeof(yes));
-    bind(sock[n], res->ai_addr, res->ai_addrlen);
+    if(bind(sock[n], res->ai_addr, res->ai_addrlen) < 0){
+      perror("bind");
+      continue;
+    }
     
     if ( (pid = fork() ) == 0) {
       //listen用プロセス
-      listen(sock[n], LISTENQ);
+      if(listen(sock[n], LISTENQ) < 0){
+        perror("listen");
+        continue;
+      }
+
       while(1){
         len = sizeof(client);
         connfd = accept(sock[n], (struct sockaddr *)&client, &len);
-        sleep(10);
+        
+        if(connfd < 0){
+          perror("accept");
+          continue;
+        }        
+        // TODO: 今のままだと無限にプロセス生成になっちゃうから、制限をつける
         if ( (pid2 = fork() ) == 0 ) {
           close(sock[n]);
           printf("accepted connection from %s, port=%d at PIDD=%d\n",
                   inet_ntoa(client.sin_addr), ntohs(client.sin_port), getpid());
-          write(connfd, "HELLO\n", 6);
+          memset(&inbuf, 0, sizeof(inbuf));
+          recv(connfd, inbuf, sizeof(inbuf), 0);
+          printf("%s", inbuf);
+         
+          memset(&obuf, 0, sizeof(obuf));
+          snprintf(obuf, sizeof(obuf),
+                "HTTP/1.0 200 OK\r\n"
+                "Content-Type: text/html\r\n"
+                 "\r\n"
+                 "<font color=red><h1>HELLO</h1></font>\r\n");
+          send(connfd, obuf, (int)strlen(obuf), 0);
           
           close(connfd); exit(0);
         }else{
@@ -88,25 +116,19 @@ int main(int argc, char *argv[])
     }else{
       if(pid != -1){
         //大元のプロセス
-        pids[n] = pid;
       }else{
         perror("pid fork");
       }
     }
     res = res->ai_next;
       
-    if(++n == MAX_PROCESS) break;
+    if(++n == MAX_PROTOCOL) break;
   }
 
 
   while(1){
     // listenをforkした子プロセスでやっているため、大元のプロセスが終了するのを防ぐため
   }
-//  freeaddrinfo(res0);
-//  
-//  for(n = 0; n < 16; n++){
-//    close(sock[n]);
-//  }
   
   return 0;
 }
@@ -119,6 +141,8 @@ void sig_child(int signo)
   printf("PID: %d, terminated\n", pid);
 } 
 
+
+// TODO: 大元のプロセスをkillした時にプロセスグループを殺したいのだがうまくいかない。
 void sig_term(int signo)
 {
   printf("accept SIGTERM at PID: %d\n", getpid());
@@ -131,26 +155,15 @@ void sig_quit(int signo)
   kill_all_pids();
 }
 
-void init_pids()
+void sig_kill(int signo)
 {
-  int i;
-
-  for(i = 0; i < MAX_PROCESS; i++){
-    pids[i] = -1;
-  }
+  printf("accept SIGKILL at PID: %d\n", getpid());
+  kill_all_pids();
 }
 
 void kill_all_pids()
 {
-  int i, pid, status;
-
-  for(i = 0; i < MAX_PROCESS; i++){
-    if(pids[i] > 0){
-      kill(pids[i], SIGTERM);
-      pids[i] = -1;
-      pid = wait(&status);
-      printf("PID: %d, terminated\n", pid);
-    }
-  }
- 
+  int status;
+  kill(0, SIGKILL); 
+  wait(&status);
 }
